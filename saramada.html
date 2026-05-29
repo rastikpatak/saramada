@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meteostanica</title>
+
+<style>
+
+body{
+    margin:0;
+    font-family:Arial;
+    background:#0099ff;
+    color:white;
+}
+
+h1{
+    text-align:center;
+    padding:20px;
+    font-size:50px;
+}
+
+.container{
+    width:95%;
+    margin:auto;
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+    gap:20px;
+}
+
+.card{
+    background:white;
+    color:black;
+    border-radius:15px;
+    padding:20px;
+    text-align:center;
+    cursor:pointer;
+    transition:0.3s;
+}
+
+.card:hover{
+    transform:scale(1.03);
+}
+
+.title{
+    font-size:25px;
+    margin-bottom:15px;
+}
+
+.value{
+    font-size:35px;
+    font-weight:bold;
+}
+
+.saved{
+    margin:30px;
+    background:white;
+    color:black;
+    border-radius:15px;
+    padding:20px;
+}
+
+</style>
+</head>
+<body>
+
+<h1>Meteostanica</h1>
+
+<div class="container">
+
+    <div class="card" onclick="saveData('temperature')">
+        <div class="title">Teplota</div>
+        <div class="value" id="temp">--</div>
+    </div>
+
+    <div class="card" onclick="saveData('humidity')">
+        <div class="title">Vlhkosť</div>
+        <div class="value" id="humidity">--</div>
+    </div>
+
+    <div class="card" onclick="saveData('wind')">
+        <div class="title">Vietor</div>
+        <div class="value" id="wind">--</div>
+    </div>
+
+    <div class="card" onclick="saveData('lux')">
+        <div class="title">Lux</div>
+        <div class="value" id="lux">--</div>
+    </div>
+
+    <div class="card" onclick="saveData('door')">
+        <div class="title">Dvere</div>
+        <div class="value" id="door">--</div>
+    </div>
+
+</div>
+
+<div class="saved">
+    <h2>Uložené dáta</h2>
+    <div id="savedData"></div>
+</div>
+
+<script>
+
+let sensorData = {};
+
+async function fetchSensor(source){
+
+    const response = await fetch(
+        `http://localhost:8000/api/latest?source=${source}`
+    );
+
+    const result = await response.json();
+
+    console.log("SOURCE", source, result);
+
+    return result.data.rows[0];
+
+}
+
+async function loadData(){
+
+    try{
+
+        // METEO
+        const meteo = await fetchSensor(0);
+
+        sensorData.meteo = meteo;
+
+        document.getElementById("temp").innerText =
+            meteo.temperature + " °C";
+
+        document.getElementById("humidity").innerText =
+            meteo.humidity + " %";
+
+        document.getElementById("wind").innerText =
+            meteo.wind_speed + " km/h";
+
+
+        // LUX
+        setInterval(async () => {
+
+            const lux = await fetchSensor(3);
+
+            if(
+                !sensorData.lux ||
+                lux.ILL_lux !== sensorData.lux.ILL_lux
+            ){
+
+                sensorData.lux = lux;
+
+                document.getElementById("lux").innerText =
+                    lux.ILL_lux + " lux";
+
+                console.log("NOVÝ LUX:", lux.ILL_lux);
+
+            }
+
+        }, 2000);
+
+
+        // DVERE
+        setInterval(async () => {
+
+            const door = await fetchSensor(8);
+
+            if(
+                !sensorData.door ||
+                door.Exti_status !== sensorData.door.Exti_status
+            ){
+
+                sensorData.door = door;
+
+                let stav = "ZATVORENÉ";
+
+                if(door.Exti_status == "True"){
+                    stav = "OTVORENÉ";
+                }
+
+                document.getElementById("door").innerText =
+                    stav;
+
+                console.log("ZMENA DVERÍ:", stav);
+
+            }
+
+        }, 1000);
+
+    }catch(err){
+
+        console.log("ERROR:", err);
+
+    }
+
+}
+
+function saveData(type){
+
+    let data = null;
+
+    if(type === "temperature"){
+        data = sensorData.meteo;
+    }
+
+    if(type === "humidity"){
+        data = sensorData.meteo;
+    }
+
+    if(type === "wind"){
+        data = sensorData.meteo;
+    }
+
+    if(type === "lux"){
+        data = sensorData.lux;
+    }
+
+    if(type === "door"){
+        data = sensorData.door;
+    }
+
+    if(!data){
+        alert("Dáta ešte nie sú načítané");
+        return;
+    }
+
+    let saved =
+        JSON.parse(localStorage.getItem("savedSensors")) || [];
+
+    saved.push({
+        type:type,
+        data:data,
+        time:new Date().toLocaleString()
+    });
+
+    localStorage.setItem(
+        "savedSensors",
+        JSON.stringify(saved)
+    );
+
+    showSaved();
+
+}
+
+function showSaved(){
+
+    let saved =
+        JSON.parse(localStorage.getItem("savedSensors")) || [];
+
+    let html = "";
+
+    saved.forEach(item => {
+
+        html += `
+            <p>
+                <b>${item.type}</b>
+                | ${item.time}
+            </p>
+        `;
+
+    });
+
+    document.getElementById("savedData").innerHTML = html;
+
+}
+
+loadData();
+showSaved();
+
+</script>
+
+</body>
+</html>
